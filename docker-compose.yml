@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  api:
+    build: .
+    command: ["/app/api"]
+    ports:
+      - "8080:8080"
+    environment:
+      - MONSTER_GAME_RPC=${MONSTER_GAME_RPC}
+      - MONSTER_GAME_CONTRACT=${MONSTER_GAME_CONTRACT}
+      - MONSTER_GAME_PRIVKEY=${MONSTER_GAME_PRIVKEY}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+
+  worker:
+    build: .
+    command: ["/app/worker"]
+    environment:
+      - MONSTER_GAME_RPC=${MONSTER_GAME_RPC}
+      - MONSTER_GAME_CONTRACT=${MONSTER_GAME_CONTRACT}
+      - MONSTER_GAME_PRIVKEY=${MONSTER_GAME_PRIVKEY}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis 

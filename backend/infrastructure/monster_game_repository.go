@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 type MonsterGameRepository struct {
@@ -55,35 +56,33 @@ func (r *MonsterGameRepository) getAuth() (*bind.TransactOpts, error) {
 	return auth, nil
 }
 
-func (r *MonsterGameRepository) RegisterPlayer(name string) (string, error) {
+func (r *MonsterGameRepository) withAuthTx(txFunc func(auth *bind.TransactOpts) (*types.Transaction, error)) (string, error) {
 	auth, err := r.getAuth()
 	if err != nil {
 		return "", err
 	}
-	tx, err := r.contract.RegisterPlayer(auth, name)
+	tx, err := txFunc(auth)
 	if err != nil {
 		return "", err
 	}
 	return tx.Hash().Hex(), nil
+}
+
+func (r *MonsterGameRepository) RegisterPlayer(name string) (string, error) {
+	return r.withAuthTx(func(auth *bind.TransactOpts) (*types.Transaction, error) {
+		return r.contract.RegisterPlayer(auth, name)
+	})
 }
 
 func (r *MonsterGameRepository) HuntMonster(monsterID int64) (string, error) {
-	auth, err := r.getAuth()
-	if err != nil {
-		return "", err
-	}
-	tx, err := r.contract.HuntMonster(auth, big.NewInt(monsterID))
-	if err != nil {
-		return "", err
-	}
-	return tx.Hash().Hex(), nil
+	return r.withAuthTx(func(auth *bind.TransactOpts) (*types.Transaction, error) {
+		return r.contract.HuntMonster(auth, big.NewInt(monsterID))
+	})
 }
 
 func (r *MonsterGameRepository) AddMonster(name string, hp, reward int) error {
-	auth, err := r.getAuth()
-	if err != nil {
-		return err
-	}
-	_, err = r.contract.AddMonster(auth, name, big.NewInt(int64(hp)), big.NewInt(int64(reward)))
+	_, err := r.withAuthTx(func(auth *bind.TransactOpts) (*types.Transaction, error) {
+		return r.contract.AddMonster(auth, name, big.NewInt(int64(hp)), big.NewInt(int64(reward)))
+	})
 	return err
 } 
