@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/leo-yssa/monster-hunt-gamefi/backend/infrastructure"
+	"gorm.io/datatypes"
 )
 
 type TxRequest struct {
@@ -19,6 +20,10 @@ type TxRequest struct {
 
 func main() {
 	rdb := infrastructure.InitRedisClientFromEnv()
+	db, err := infrastructure.InitGormDBFromEnv()
+	if err != nil {
+		log.Fatalf("Postgres DB 초기화 실패: %v", err)
+	}
 	ctx := context.Background()
 	queueName := "tx_queue"
 
@@ -45,40 +50,64 @@ func main() {
 			continue
 		}
 		log.Printf("[WORKER] 트랜잭션 요청 처리: %+v", req)
-		processTxRequest(ctx, monsterGameRepo, req)
-	}
-}
 
-func processTxRequest(ctx context.Context, repo *infrastructure.MonsterGameRepository, req TxRequest) {
-	switch req.Action {
-	case "register":
-		name, _ := req.Params["name"].(string)
-		txHash, err := repo.RegisterPlayer(name)
-		if err != nil {
-			log.Printf("registerPlayer 실패: %v", err)
-		} else {
-			log.Printf("registerPlayer tx: %s", txHash)
+		// 트랜잭션 제출 및 DB 저장
+		txHash := ""
+		errMsg := ""
+		status := "pending"
+		var paramsJSON datatypes.JSON
+		if b, err := json.Marshal(req.Params); err == nil {
+			paramsJSON = datatypes.JSON(b)
 		}
-	case "addMonster":
-		name, _ := req.Params["name"].(string)
-		hp, _ := toInt(req.Params["hp"])
-		reward, _ := toInt(req.Params["reward"])
-		err := repo.AddMonster(name, hp, reward)
-		if err != nil {
-			log.Printf("addMonster 실패: %v", err)
-		} else {
-			log.Printf("addMonster 성공: %s", name)
+		switch req.Action {
+		case "register":
+			name, _ := req.Params["name"].(string)
+			txHash, err = monsterGameRepo.RegisterPlayer(name)
+			if err != nil {
+				errMsg = err.Error()
+				status = "fail"
+			} else {
+				status = "pending"
+			}
+		case "addMonster":
+			name, _ := req.Params["name"].(string)
+			hp, _ := toInt(req.Params["hp"])
+			reward, _ := toInt(req.Params["reward"])
+			err = monsterGameRepo.AddMonster(name, hp, reward)
+			if err != nil {
+				errMsg = err.Error()
+				status = "fail"
+			}
+		case "hunt":
+			monsterID, _ := toInt64(req.Params["monster_id"])
+			txHash, err = monsterGameRepo.HuntMonster(monsterID)
+			if err != nil {
+				errMsg = err.Error()
+				status = "fail"
+			} else {
+				status = "pending"
+			}
+		default:
+			log.Printf("알 수 없는 action: %s", req.Action)
+			continue
 		}
-	case "hunt":
-		monsterID, _ := toInt64(req.Params["monster_id"])
-		txHash, err := repo.HuntMonster(monsterID)
-		if err != nil {
-			log.Printf("huntMonster 실패: %v", err)
-		} else {
-			log.Printf("huntMonster tx: %s", txHash)
+		if txHash != "" {
+			db.Create(&infrastructure.TxStatus{
+				TxHash:  txHash,
+				Action:  req.Action,
+				Params:  paramsJSON,
+				UserID:  req.User,
+				Status:  status,
+			})
+		} else if errMsg != "" {
+			db.Create(&infrastructure.TxStatus{
+				TxHash:  "",
+				Action:  req.Action,
+				Params:  paramsJSON,
+				UserID:  req.User,
+				Status:  status,
+			})
 		}
-	default:
-		log.Printf("알 수 없는 액션: %s", req.Action)
 	}
 }
 

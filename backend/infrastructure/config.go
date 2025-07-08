@@ -4,6 +4,8 @@ import (
 	"os"
 	"log"
 	"github.com/go-redis/redis/v8"
+	"gorm.io/gorm"
+	"gorm.io/driver/postgres"
 )
 
 func LoadEnvOrDefault(key, def string) string {
@@ -31,4 +33,24 @@ func InitRedisClientFromEnv() *redis.Client {
 		log.Fatalf("Redis URL 파싱 실패: %v", err)
 	}
 	return redis.NewClient(opt)
+}
+
+func InitGormDBFromEnv() (*gorm.DB, error) {
+	dsn := os.Getenv("POSTGRES_DSN")
+	if dsn == "" {
+		host := LoadEnvOrDefault("POSTGRES_HOST", "localhost")
+		port := LoadEnvOrDefault("POSTGRES_PORT", "5432")
+		user := LoadEnvOrDefault("POSTGRES_USER", "postgres")
+		password := LoadEnvOrDefault("POSTGRES_PASSWORD", "postgres")
+		dbname := LoadEnvOrDefault("POSTGRES_DB", "monster_gamefi")
+		dsn = "host=" + host + " port=" + port + " user=" + user + " password=" + password + " dbname=" + dbname + " sslmode=disable TimeZone=UTC"
+	}
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+	if err := db.AutoMigrate(&TxStatus{}); err != nil {
+		return nil, err
+	}
+	return db, nil
 } 

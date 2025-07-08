@@ -20,8 +20,9 @@
 | 분야 | 기술 |
 |------|------|
 | 스마트컨트랙트 | Solidity, Hardhat |
-| 백엔드 | Golang, go-ethereum, Gin |
+| 백엔드 | Golang, go-ethereum, Gin, gorm |
 | 큐/비동기 | Redis, worker(Go) |
+| 트랜잭션 상태관리 | Postgres, gorm, confirmation worker |
 | 배포/운영 | Docker, docker-compose, .env |
 | 문서화 | Swagger (자동 생성) |
 
@@ -40,13 +41,12 @@ monster-hunt-gamefi/
 ├── backend/
 │   ├── application/          # 서비스 계층
 │   ├── domain/               # 도메인 모델
-│   ├── infrastructure/       # 이더리움/Redis 연동
+│   ├── infrastructure/       # 이더리움/Redis/DB 연동
 │   └── interface/            # API 라우터 및 Swagger
 ├── cmd/
 │   ├── api/                  # API 서버 엔트리포인트
-│   │   └── main.go
-│   └── worker/               # 워커 엔트리포인트
-│       └── main.go
+│   ├── worker/               # 트랜잭션 제출 워커
+│   └── confirmation_worker/  # 트랜잭션 상태 확인 워커
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env                      # 환경변수 파일 (예시 포함)
@@ -68,7 +68,8 @@ monster-hunt-gamefi/
 
 ### 🏗️ 구조적 특징
 - **인메모리 저장소 완전 제거**: 모든 상태/로직은 이더리움 컨트랙트에 기록
-- **API 서버 ↔ Redis 큐 ↔ 워커 ↔ 이더리움** 구조로 확장성/운영 자동화 실현
+- **API 서버 ↔ Redis 큐 ↔ worker ↔ 이더리움** 구조로 확장성/운영 자동화 실현
+- **트랜잭션 상태 추적**: Postgres에 트랜잭션 상태(pending/success/fail) 저장, confirmation_worker가 receipt 확인 및 상태 업데이트
 - **Swagger 문서 자동 생성/노출**: http://localhost:8080/swagger/index.html
 
 ---
@@ -83,30 +84,42 @@ npx hardhat run scripts/deploy.ts --network localhost
 ```
 - 배포 후 콘솔에 MonsterGame 컨트랙트 주소와 배포 계정 프라이빗키가 출력됨
 
-### 2. 환경변수 설정 (.env)
-```bash
-export MONSTER_GAME_RPC=http://localhost:8545
-export MONSTER_GAME_CONTRACT=<MonsterGame_컨트랙트_주소>
-export MONSTER_GAME_PRIVKEY=<Hardhat_테스트_계정_프라이빗키>
-export REDIS_URL=redis://localhost:6379
+### 2. 환경변수 설정 (.env 예시)
+```env
+MONSTER_GAME_RPC=http://localhost:8545
+MONSTER_GAME_CONTRACT=0x...
+MONSTER_GAME_PRIVKEY=...
+REDIS_URL=redis://localhost:6379
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=monster_gamefi
+# POSTGRES_DSN=host=postgres port=5432 user=postgres password=postgres dbname=monster_gamefi sslmode=disable TimeZone=UTC
 ```
 - 프라이빗키는 0x 없이 입력
 - Hardhat 노드 실행 시 출력되는 첫 번째 계정 사용 권장
 
-### 3. 서버 실행
+### 3. 전체 서비스 실행 (Docker Compose)
 ```bash
 docker-compose up --build
 ```
-- api, worker, redis, 컨테이너가 자동 실행
+- api, worker, confirmation_worker, redis, postgres 컨테이너가 자동 실행
 - .env 파일의 환경변수가 각 컨테이너에 주입됨
 - Swagger: http://localhost:8080/swagger/index.html
 
-### 4. API 테스트 예시
+### 4. 트랜잭션 상태 추적 구조
+- API/worker가 트랜잭션 요청을 Redis 큐에 push
+- worker가 트랜잭션 제출 후 Postgres에 상태(pending) 저장
+- confirmation_worker가 pending 트랜잭션을 receipt로 확인, success/fail로 상태 업데이트
+- (확장) API에서 트랜잭션 상태 조회 엔드포인트 구현 가능
+
+### 5. API 테스트 예시
 ```bash
 curl -X POST http://localhost:8080/players -H "Content-Type: application/json" -d '{"name":"Alice"}'
 curl -X POST http://localhost:8080/monsters -H "Content-Type: application/json" -d '{"name":"Goblin","hp":10,"reward":100}'
 curl -X POST http://localhost:8080/hunt -H "Content-Type: application/json" -d '{"monster_id":0}'
 ```
-- 모든 트랜잭션 요청은 Redis 큐에 push되고, 워커가 실제 이더리움 트랜잭션을 처리함
+- 모든 트랜잭션 요청은 Redis 큐에 push되고, worker가 실제 이더리움 트랜잭션을 처리하며, 상태는 Postgres에서 추적됨
 
 ---
