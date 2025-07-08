@@ -1,0 +1,21 @@
+{
+    "name": "monster-hunt-gamefi",
+    "version": "1.0.0",
+    "description": "GameFi project with Solidity smart contracts and TypeScript Hardhat deployment",
+    "scripts": {
+      "compile": "hardhat compile",
+      "deploy": "hardhat run scripts/deploy.ts --network hardhat",
+      "test": "hardhat test"
+    },
+    "devDependencies": {
+      "@nomicfoundation/hardhat-toolbox": "^3.0.0",
+      "@types/node": "^20.0.0",
+      "hardhat": "^2.22.0",
+      "ts-node": "^10.9.2",
+      "typescript": "^5.2.0"
+    },
+    "dependencies": {
+      "@openzeppelin/contracts": "^5.0.0"
+    }
+  }
+  
