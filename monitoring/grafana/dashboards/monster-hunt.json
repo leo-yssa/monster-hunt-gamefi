@@ -1,0 +1,174 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Monster Hunt GameFi Dashboard",
+    "tags": ["monster-hunt", "gamefi"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "System Metrics",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "app_goroutines_total",
+            "legendFormat": "Goroutines"
+          },
+          {
+            "expr": "app_memory_alloc_bytes / 1024 / 1024",
+            "legendFormat": "Memory Alloc (MB)"
+          },
+          {
+            "expr": "app_memory_sys_bytes / 1024 / 1024",
+            "legendFormat": "Memory Sys (MB)"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "displayMode": "list"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Database Connections",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "app_db_connections_total",
+            "legendFormat": "Total Connections"
+          },
+          {
+            "expr": "app_db_connections_in_use",
+            "legendFormat": "In Use"
+          },
+          {
+            "expr": "app_db_connections_idle",
+            "legendFormat": "Idle"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "displayMode": "list"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "Redis Queue Length",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "app_redis_queue_length",
+            "legendFormat": "Queue Length"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 50
+                },
+                {
+                  "color": "red",
+                  "value": 100
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 4,
+        "title": "Transaction Processing Time",
+        "type": "heatmap",
+        "targets": [
+          {
+            "expr": "rate(app_transaction_processing_seconds_bucket[5m])",
+            "legendFormat": "{{le}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "scheme"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 5,
+        "title": "Transaction Status",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "app_transaction_status_total",
+            "legendFormat": "{{status}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "5s"
+  }
+} 

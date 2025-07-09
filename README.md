@@ -12,6 +12,7 @@
 - **Golang 백엔드 서버**: 유저 등록, 사냥 요청, 보상 조회 API 제공 (실제 컨트랙트 연동)
 - **Web3 연동**: 백엔드 ↔ 스마트컨트랙트 상호작용 완전 일원화
 - **운영 자동화/확장성**: Redis 큐+워커, Docker/compose 기반 운영
+- **보안 강화**: 그레이스풀 종료, 입력 검증, 동시성 제어, 에러 처리
 
 ---
 
@@ -24,6 +25,8 @@
 | 큐/비동기 | Redis, worker(Go) |
 | 트랜잭션 상태관리 | Postgres, gorm, confirmation worker |
 | 배포/운영 | Docker, docker-compose, .env |
+| 보안/안정성 | Rate Limiting, 그레이스풀 종료, 입력 검증, 동시성 제어 |
+| 모니터링 | Prometheus, Grafana |
 | 문서화 | Swagger (자동 생성) |
 
 ---
@@ -44,12 +47,18 @@ monster-hunt-gamefi/
 ├── backend/
 │   ├── application/          # 서비스 계층
 │   ├── domain/               # 도메인 모델
-│   ├── infrastructure/       # 이더리움/Redis/DB 연동
+│   ├── infrastructure/       # 이더리움/Redis/DB 연동 + 보안 유틸리티
+│   │   ├── security.go      # 보안 유틸리티 (GetClientIP, SafeExecute, RetryWithBackoff 등)
+│   │   ├── redis_queue.go   # Redis 큐 관리 (Close 메서드 추가)
+│   │   └── ...
 │   └── interface/            # API 라우터 및 Swagger
 ├── cmd/
-│   ├── api/                  # API 서버 엔트리포인트
-│   ├── worker/               # 트랜잭션 제출 워커
-│   └── confirmation_worker/  # 트랜잭션 상태 확인 워커
+│   ├── api/                  # API 서버 엔트리포인트 (그레이스풀 종료 지원)
+│   ├── worker/               # 트랜잭션 제출 워커 (그레이스풀 종료 + 재시도 로직)
+│   └── confirmation_worker/  # 트랜잭션 상태 확인 워커 (동시성 제어)
+├── monitoring/               # Prometheus + Grafana 모니터링
+│   ├── prometheus/
+│   └── grafana/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env                      # 환경변수 파일 (예시 포함)
@@ -76,6 +85,46 @@ monster-hunt-gamefi/
 - **API 서버 ↔ Redis 큐 ↔ worker ↔ 이더리움** 구조로 확장성/운영 자동화 실현
 - **트랜잭션 상태 추적**: Postgres에 트랜잭션 상태(pending/success/fail) 저장, confirmation_worker가 receipt 확인 및 상태 업데이트
 - **Swagger 문서 자동 생성/노출**: http://localhost:8080/swagger/index.html
+
+### 🔒 보안 및 안정성 기능
+
+#### **그레이스풀 종료**
+- **시그널 처리**: SIGTERM/SIGINT 수신 시 안전한 종료
+- **작업 완료 대기**: 진행 중인 트랜잭션 처리 완료 후 종료
+- **리소스 정리**: DB/Redis 연결 안전한 종료
+
+#### **입력 검증 강화**
+- **Binding 태그**: `binding:"required,min=1,max=32"` 등 구조적 검증
+- **추가 검증**: 비즈니스 로직 레벨 검증 (HP 범위, 보상 범위 등)
+- **타입 안전성**: Go의 강타입 시스템 활용
+
+#### **에러 처리 및 재시도**
+- **SafeExecute**: 패닉 복구로 안정성 확보
+- **RetryWithBackoff**: 지수 백오프로 일시적 실패 복구
+- **컨텍스트 타임아웃**: 모든 외부 호출에 타임아웃 적용
+
+#### **동시성 제어**
+- **Redis BLPop**: 원자적 메시지 제거로 중복 처리 방지
+- **조건부 업데이트**: Confirmation Worker에서 `WHERE status = 'pending'`으로 동시성 제어
+- **고루틴 안전성**: WaitGroup으로 고루틴 관리
+
+#### **보안 미들웨어**
+- **GetClientIP**: 프록시 환경 고려한 클라이언트 IP 추출
+- **IP 로깅**: 모든 요청에 대한 IP 로깅
+- **프라이빗 IP 검증**: 선택적 접근 제한 가능
+
+#### **Rate Limiting**
+- **API 레벨**: Gin 미들웨어로 1분 1000회 제한
+- **환경변수 제어**: `RATE_LIMIT_ENABLED`, `RATE_LIMIT_RATE`로 설정 가능
+
+#### **헬스체크**
+- **`/health` 엔드포인트**: 서비스 상태 확인
+- **연결 상태 모니터링**: Redis/DB 연결 상태 확인
+
+#### **모니터링**
+- **Prometheus**: 메트릭 수집 및 노출
+- **Grafana**: 대시보드 및 알림 설정
+- **메트릭**: API 요청 수, 응답 시간, 에러율, 트랜잭션 상태 등
 
 ---
 
@@ -107,31 +156,45 @@ POSTGRES_PORT=5432
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=monster_gamefi
-# POSTGRES_DSN=host=postgres port=5432 user=postgres password=postgres dbname=monster_gamefi sslmode=disable TimeZone=UTC
+# Rate Limiting 설정
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_RATE=1000-M  # 1분 1000회
 ```
-- 프라이빗키는 0x 없이 입력
-- Hardhat 노드 실행 시 출력되는 첫 번째 계정 사용 권장
 
 ### 4. 전체 서비스 실행 (Docker Compose)
 ```bash
 docker-compose up --build
 ```
-- api, worker, confirmation_worker, redis, postgres 컨테이너가 자동 실행
+- api, worker, confirmation_worker, redis, postgres, prometheus, grafana 컨테이너가 자동 실행
 - .env 파일의 환경변수가 각 컨테이너에 주입됨
 - Swagger: http://localhost:8080/swagger/index.html
+- 헬스체크: http://localhost:8080/health
+- Grafana: http://localhost:3000 (admin/admin)
+- Prometheus: http://localhost:9090
 
 ### 5. 트랜잭션 상태 추적 구조
 - API/worker가 트랜잭션 요청을 Redis 큐에 push
 - worker가 트랜잭션 제출 후 Postgres에 상태(pending) 저장
 - confirmation_worker가 pending 트랜잭션을 receipt로 확인, success/fail로 상태 업데이트
-- (확장) API에서 트랜잭션 상태 조회 엔드포인트 구현 가능
+- 동시성 제어로 중복 처리 방지
 
-### 6. API 테스트 예시
+### 6. 모니터링 대시보드
+- **Grafana**: http://localhost:3000
+  - API 메트릭: 요청 수, 응답 시간, 에러율
+  - 트랜잭션 메트릭: 성공/실패율, 처리 시간
+  - 시스템 메트릭: CPU, 메모리, 네트워크
+
+### 7. API 테스트 예시
 ```bash
+# 플레이어 등록
 curl -X POST http://localhost:8080/players -H "Content-Type: application/json" -d '{"name":"Alice"}'
-curl -X POST http://localhost:8080/monsters -H "Content-Type: application/json" -d '{"name":"Goblin","hp":10,"reward":100}'
-curl -X POST http://localhost:8080/hunt -H "Content-Type: application/json" -d '{"monster_id":0}'
-```
-- 모든 트랜잭션 요청은 Redis 큐에 push되고, worker가 실제 이더리움 트랜잭션을 처리하며, 상태는 Postgres에서 추적됨
 
----
+# 몬스터 추가 (owner만 가능)
+curl -X POST http://localhost:8080/monsters -H "Content-Type: application/json" -d '{"name":"Goblin","hp":10,"reward":100}'
+
+# 몬스터 사냥
+curl -X POST http://localhost:8080/hunt -H "Content-Type: application/json" -d '{"monster_id":0}'
+
+# 헬스체크
+curl http://localhost:8080/health
+```
