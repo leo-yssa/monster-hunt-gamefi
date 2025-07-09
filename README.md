@@ -19,7 +19,7 @@
 
 | 분야 | 기술 |
 |------|------|
-| 스마트컨트랙트 | Solidity, Hardhat |
+| 스마트컨트랙트 | Solidity, Hardhat (Proxy/Upgradeable 패턴) |
 | 백엔드 | Golang, go-ethereum, Gin, gorm |
 | 큐/비동기 | Redis, worker(Go) |
 | 트랜잭션 상태관리 | Postgres, gorm, confirmation worker |
@@ -33,10 +33,13 @@
 ```
 monster-hunt-gamefi/
 ├── contracts/                # Solidity 스마트컨트랙트
-│   ├── MonsterGame.sol
+│   ├── MonsterGame.sol      # 프록시(업그레이더블) + 보안(Pausable, ReentrancyGuard 등) 적용
+│   ├── MonsterGameV2.sol    # 업그레이드 예시 (version 함수 추가)
 │   └── MyGameToken.sol
 ├── scripts/                  # 배포 스크립트
-│   └── deploy.ts
+│   └── deploy.ts            # import/export 스타일, 프록시 배포
+├── test/                    # 테스트 코드
+│   └── MonsterGame.test.ts  # 프록시 업그레이드/상태 유지/보안 테스트 포함
 ├── artifacts/                # 컴파일 산출물(ABI 등)
 ├── backend/
 │   ├── application/          # 서비스 계층
@@ -67,7 +70,9 @@ monster-hunt-gamefi/
 - 사냥 시 자동 토큰 전송
 
 ### 🏗️ 구조적 특징
-- **인메모리 저장소 완전 제거**: 모든 상태/로직은 이더리움 컨트랙트에 기록
+- **MonsterGame 컨트랙트는 프록시(업그레이더블) 패턴 + 보안(Pausable, ReentrancyGuard 등)으로 배포**
+- **pause/unpause(긴급 중지), 재진입 방지, 입력값 검증 등 보안 기능 내장**
+- **상태/로직 분리, 안전한 업그레이드 지원**
 - **API 서버 ↔ Redis 큐 ↔ worker ↔ 이더리움** 구조로 확장성/운영 자동화 실현
 - **트랜잭션 상태 추적**: Postgres에 트랜잭션 상태(pending/success/fail) 저장, confirmation_worker가 receipt 확인 및 상태 업데이트
 - **Swagger 문서 자동 생성/노출**: http://localhost:8080/swagger/index.html
@@ -82,12 +87,19 @@ npx hardhat compile
 npx hardhat node # 새 터미널에서 실행, 종료하지 말 것
 npx hardhat run scripts/deploy.ts --network localhost
 ```
-- 배포 후 콘솔에 MonsterGame 컨트랙트 주소와 배포 계정 프라이빗키가 출력됨
+- **MonsterGame은 프록시(업그레이더블) 패턴으로 배포**
+- 배포 후 콘솔에 MonsterGame(프록시) 컨트랙트 주소와 배포 계정 프라이빗키가 출력됨
 
-### 2. 환경변수 설정 (.env 예시)
+### 2. 프록시 업그레이드 및 테스트
+- `contracts/MonsterGameV2.sol` : 업그레이드 예시 컨트랙트 (version 함수 추가)
+- `test/MonsterGame.test.ts` :
+  - 프록시 업그레이드(`upgrades.upgradeProxy`) 후 상태(state) 유지 및 신규 기능(version) 정상 동작 테스트
+  - **pause/unpause, 입력값 검증, 권한, 보안 관련 테스트 포함**
+
+### 3. 환경변수 설정 (.env 예시)
 ```env
 MONSTER_GAME_RPC=http://localhost:8545
-MONSTER_GAME_CONTRACT=0x...
+MONSTER_GAME_CONTRACT=0x...   # 프록시 주소로 설정
 MONSTER_GAME_PRIVKEY=...
 REDIS_URL=redis://localhost:6379
 POSTGRES_HOST=postgres
@@ -100,7 +112,7 @@ POSTGRES_DB=monster_gamefi
 - 프라이빗키는 0x 없이 입력
 - Hardhat 노드 실행 시 출력되는 첫 번째 계정 사용 권장
 
-### 3. 전체 서비스 실행 (Docker Compose)
+### 4. 전체 서비스 실행 (Docker Compose)
 ```bash
 docker-compose up --build
 ```
@@ -108,13 +120,13 @@ docker-compose up --build
 - .env 파일의 환경변수가 각 컨테이너에 주입됨
 - Swagger: http://localhost:8080/swagger/index.html
 
-### 4. 트랜잭션 상태 추적 구조
+### 5. 트랜잭션 상태 추적 구조
 - API/worker가 트랜잭션 요청을 Redis 큐에 push
 - worker가 트랜잭션 제출 후 Postgres에 상태(pending) 저장
 - confirmation_worker가 pending 트랜잭션을 receipt로 확인, success/fail로 상태 업데이트
 - (확장) API에서 트랜잭션 상태 조회 엔드포인트 구현 가능
 
-### 5. API 테스트 예시
+### 6. API 테스트 예시
 ```bash
 curl -X POST http://localhost:8080/players -H "Content-Type: application/json" -d '{"name":"Alice"}'
 curl -X POST http://localhost:8080/monsters -H "Content-Type: application/json" -d '{"name":"Goblin","hp":10,"reward":100}'

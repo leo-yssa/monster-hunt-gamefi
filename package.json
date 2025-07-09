@@ -3,19 +3,32 @@
     "version": "1.0.0",
     "description": "GameFi project with Solidity smart contracts and TypeScript Hardhat deployment",
     "scripts": {
-      "compile": "hardhat compile",
-      "deploy": "hardhat run scripts/deploy.ts --network hardhat",
-      "test": "hardhat test"
+        "compile": "hardhat compile",
+        "deploy": "hardhat run scripts/deploy.ts --network hardhat",
+        "test": "hardhat test"
     },
     "devDependencies": {
-      "@nomicfoundation/hardhat-toolbox": "^3.0.0",
-      "@types/node": "^20.0.0",
-      "hardhat": "^2.22.0",
-      "ts-node": "^10.9.2",
-      "typescript": "^5.2.0"
+        "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
+        "@nomicfoundation/hardhat-ethers": "^3.0.0",
+        "@nomicfoundation/hardhat-network-helpers": "^1.0.0",
+        "@nomicfoundation/hardhat-verify": "^2.0.14",
+        "@openzeppelin/hardhat-upgrades": "^3.9.1",
+        "@typechain/ethers-v6": "^0.4.0",
+        "@typechain/hardhat": "^8.0.0",
+        "@types/chai": "^4.2.0",
+        "@types/mocha": "^10.0.0",
+        "@types/node": "^20.0.0",
+        "chai": "^4.3.0",
+        "ethers": "^6.4.0",
+        "hardhat": "^2.22.2",
+        "hardhat-gas-reporter": "^1.0.8",
+        "solidity-coverage": "^0.8.1",
+        "ts-node": "^10.9.2",
+        "typechain": "^8.2.0",
+        "typescript": "^5.2.0"
     },
     "dependencies": {
-      "@openzeppelin/contracts": "^5.0.0"
+        "@openzeppelin/contracts": "^5.0.0",
+        "@openzeppelin/contracts-upgradeable": "^5.3.0"
     }
-  }
-  
+}
