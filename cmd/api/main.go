@@ -29,9 +29,9 @@ func main() {
 
 	// MonsterGameRepository 초기화
 	monsterGameRepo, err := infrastructure.NewMonsterGameRepository(
-		os.Getenv("ETHEREUM_RPC_URL"),
-		os.Getenv("CONTRACT_ADDRESS"),
-		os.Getenv("PRIVATE_KEY"),
+		os.Getenv("MONSTER_GAME_RPC"),
+		os.Getenv("MONSTER_GAME_CONTRACT"),
+		os.Getenv("MONSTER_GAME_PRIVKEY"),
 	)
 	if err != nil {
 		log.Fatalf("Failed to initialize MonsterGameRepository: %v", err)

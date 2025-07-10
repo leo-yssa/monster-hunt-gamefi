@@ -94,6 +94,29 @@ services:
           cpus: '0.25'
     restart: unless-stopped
 
+  event_indexer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["/app/event_indexer"]
+    env_file:
+      - .env
+    environment:
+      - MONSTER_GAME_WS_RPC=${MONSTER_GAME_WS_RPC}
+      - MONSTER_GAME_CONTRACT=${MONSTER_GAME_CONTRACT}
+      - POSTGRES_DSN=host=postgres user=postgres password=postgres dbname=monster_gamefi port=5432 sslmode=disable
+    depends_on:
+      - postgres
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+    restart: unless-stopped
+
   postgres:
     image: postgres:15
     environment:

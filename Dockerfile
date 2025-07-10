@@ -8,10 +8,12 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o api ./cmd/api/main.go
 RUN CGO_ENABLED=0 GOOS=linux go build -o worker ./cmd/worker/main.go
 RUN CGO_ENABLED=0 GOOS=linux go build -o confirmation_worker ./cmd/confirmation_worker/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o event_indexer ./cmd/event_indexer/main.go
 
 FROM gcr.io/distroless/base-debian11
 WORKDIR /app
 COPY --from=builder /app/api ./api
 COPY --from=builder /app/worker ./worker
 COPY --from=builder /app/confirmation_worker ./confirmation_worker
+COPY --from=builder /app/event_indexer ./event_indexer
 CMD ["/app/api"] 

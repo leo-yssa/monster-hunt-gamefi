@@ -14,4 +14,21 @@ type TxStatus struct {
 	Status    string         `gorm:"size:16;not null;default:pending"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type MonsterHuntedEvent struct {
+	ID        uint `gorm:"primaryKey"`
+	TxHash    string
+	Player    string
+	MonsterId string
+	Reward    string
+	CreatedAt time.Time
+}
+
+type PlayerRegisteredEvent struct {
+	ID        uint `gorm:"primaryKey"`
+	TxHash    string
+	Player    string
+	Name      string
+	CreatedAt time.Time
 } 
