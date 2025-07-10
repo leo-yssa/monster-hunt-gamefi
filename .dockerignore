@@ -35,9 +35,6 @@ vendor/
 # Go build artifacts
 backend/bin/
 
-# Swagger
-backend/docs/
-
 # IDE/Editor
 .vscode/
 .idea/

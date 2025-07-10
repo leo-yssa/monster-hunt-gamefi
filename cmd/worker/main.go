@@ -139,7 +139,7 @@ func (w *Worker) processTransaction(req TxRequest) {
 			case "register":
 				name, _ := req.Params["name"].(string)
 				var err error
-				txHash, err = w.monsterGameRepo.RegisterPlayer(name)
+				txHash, err = w.monsterGameRepo.RegisterPlayer(w.ctx, name)
 				if err != nil {
 					errMsg = err.Error()
 					status = "fail"
@@ -152,7 +152,7 @@ func (w *Worker) processTransaction(req TxRequest) {
 				hp, _ := toInt(req.Params["hp"])
 				reward, _ := toInt(req.Params["reward"])
 				var err error
-				txHash, err = w.monsterGameRepo.AddMonster(name, hp, reward)
+				txHash, err = w.monsterGameRepo.AddMonster(w.ctx, name, hp, reward)
 				if err != nil {
 					errMsg = err.Error()
 					status = "fail"
@@ -162,7 +162,7 @@ func (w *Worker) processTransaction(req TxRequest) {
 			case "hunt":
 				monsterID, _ := toInt64(req.Params["monster_id"])
 				var err error
-				txHash, err = w.monsterGameRepo.HuntMonster(monsterID)
+				txHash, err = w.monsterGameRepo.HuntMonster(w.ctx, monsterID)
 				if err != nil {
 					errMsg = err.Error()
 					status = "fail"

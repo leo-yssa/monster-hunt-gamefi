@@ -1,21 +1,34 @@
 package application
 
 import (
-	"github.com/leo-yssa/monster-hunt-gamefi/backend/infrastructure"
+	"context"
 )
 
+// GameRepository 인터페이스 정의
+type GameRepository interface {
+	RegisterPlayer(ctx context.Context, name string) (string, error)
+	AddMonster(ctx context.Context, name string, hp, reward int) (string, error)
+	HuntMonster(ctx context.Context, monsterID int64) (string, error)
+}
+
 type GameService struct {
-	MonsterGameRepo *infrastructure.MonsterGameRepository
+	repo GameRepository
 }
 
-func (s *GameService) RegisterPlayer(name string) (string, error) {
-	return s.MonsterGameRepo.RegisterPlayer(name)
+func NewGameService(repo GameRepository) *GameService {
+	return &GameService{
+		repo: repo,
+	}
 }
 
-func (s *GameService) AddMonster(name string, hp, reward int) error {
-	return s.MonsterGameRepo.AddMonster(name, hp, reward)
+func (s *GameService) RegisterPlayer(ctx context.Context, name string) (string, error) {
+	return s.repo.RegisterPlayer(ctx, name)
 }
 
-func (s *GameService) HuntMonster(monsterID int64) (string, error) {
-	return s.MonsterGameRepo.HuntMonster(monsterID)
+func (s *GameService) AddMonster(ctx context.Context, name string, hp, reward int) (string, error) {
+	return s.repo.AddMonster(ctx, name, hp, reward)
+}
+
+func (s *GameService) HuntMonster(ctx context.Context, monsterID int64) (string, error) {
+	return s.repo.HuntMonster(ctx, monsterID)
 }

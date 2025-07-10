@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	_ "github.com/leo-yssa/monster-hunt-gamefi/backend/docs"
+	"github.com/leo-yssa/monster-hunt-gamefi/backend/application"
 	"github.com/leo-yssa/monster-hunt-gamefi/backend/infrastructure"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -98,7 +99,7 @@ func MakeTxQueueHandler(action string, paramBuilder func(*gin.Context) (map[stri
 // @Param player body RegisterPlayerRequest true "플레이어 정보"
 // @Success 200 {object} map[string]string
 // @Router /players [post]
-func RegisterPlayerHandler(redisQueue *infrastructure.RedisQueue) gin.HandlerFunc {
+func RegisterPlayerHandler(redisQueue *infrastructure.RedisQueue, gameService *application.GameService) gin.HandlerFunc {
 	return MakeTxQueueHandler("register", func(c *gin.Context) (map[string]interface{}, error) {
 		var req RegisterPlayerRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -121,7 +122,7 @@ func RegisterPlayerHandler(redisQueue *infrastructure.RedisQueue) gin.HandlerFun
 // @Param monster body AddMonsterRequest true "몬스터 정보"
 // @Success 200 {object} map[string]string
 // @Router /monsters [post]
-func AddMonsterHandler(redisQueue *infrastructure.RedisQueue) gin.HandlerFunc {
+func AddMonsterHandler(redisQueue *infrastructure.RedisQueue, gameService *application.GameService) gin.HandlerFunc {
 	return MakeTxQueueHandler("addMonster", func(c *gin.Context) (map[string]interface{}, error) {
 		var req AddMonsterRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -147,7 +148,7 @@ func AddMonsterHandler(redisQueue *infrastructure.RedisQueue) gin.HandlerFunc {
 // @Param hunt body HuntMonsterRequest true "사냥 정보"
 // @Success 200 {object} map[string]int
 // @Router /hunt [post]
-func HuntMonsterHandler(redisQueue *infrastructure.RedisQueue) gin.HandlerFunc {
+func HuntMonsterHandler(redisQueue *infrastructure.RedisQueue, gameService *application.GameService) gin.HandlerFunc {
 	return MakeTxQueueHandler("hunt", func(c *gin.Context) (map[string]interface{}, error) {
 		var req HuntMonsterRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -173,7 +174,7 @@ func MetricsHandler() gin.HandlerFunc {
 	return gin.WrapH(promhttp.Handler())
 }
 
-func NewRouter(redisQueue *infrastructure.RedisQueue) *gin.Engine {
+func NewRouter(redisQueue *infrastructure.RedisQueue, gameService *application.GameService) *gin.Engine {
 	r := gin.Default()
 	
 	// 보안 미들웨어 추가
@@ -203,9 +204,9 @@ func NewRouter(redisQueue *infrastructure.RedisQueue) *gin.Engine {
 	r.GET("/metrics", MetricsHandler())
 	
 	// API 엔드포인트
-	r.POST("/players", RegisterPlayerHandler(redisQueue))
-	r.POST("/monsters", AddMonsterHandler(redisQueue))
-	r.POST("/hunt", HuntMonsterHandler(redisQueue))
+	r.POST("/players", RegisterPlayerHandler(redisQueue, gameService))
+	r.POST("/monsters", AddMonsterHandler(redisQueue, gameService))
+	r.POST("/hunt", HuntMonsterHandler(redisQueue, gameService))
 	
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	

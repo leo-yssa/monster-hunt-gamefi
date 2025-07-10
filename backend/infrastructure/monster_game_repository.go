@@ -96,19 +96,19 @@ func (r *MonsterGameRepository) withAuthTx(txFunc func(auth *bind.TransactOpts) 
 	return tx.Hash().Hex(), nil
 }
 
-func (r *MonsterGameRepository) RegisterPlayer(name string) (string, error) {
+func (r *MonsterGameRepository) RegisterPlayer(ctx context.Context, name string) (string, error) {
 	return r.withAuthTx(func(auth *bind.TransactOpts) (*types.Transaction, error) {
 		return r.contract.RegisterPlayer(auth, name)
 	})
 }
 
-func (r *MonsterGameRepository) HuntMonster(monsterID int64) (string, error) {
+func (r *MonsterGameRepository) HuntMonster(ctx context.Context, monsterID int64) (string, error) {
 	return r.withAuthTx(func(auth *bind.TransactOpts) (*types.Transaction, error) {
 		return r.contract.HuntMonster(auth, big.NewInt(monsterID))
 	})
 }
 
-func (r *MonsterGameRepository) AddMonster(name string, hp, reward int) (string, error) {
+func (r *MonsterGameRepository) AddMonster(ctx context.Context, name string, hp, reward int) (string, error) {
 	return r.withAuthTx(func(auth *bind.TransactOpts) (*types.Transaction, error) {
 		return r.contract.AddMonster(auth, name, big.NewInt(int64(hp)), big.NewInt(int64(reward)))
 	})

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/leo-yssa/monster-hunt-gamefi/backend/application"
 	"github.com/leo-yssa/monster-hunt-gamefi/backend/infrastructure"
 	_interface "github.com/leo-yssa/monster-hunt-gamefi/backend/interface"
 )
@@ -26,8 +27,21 @@ func main() {
 	redisQueue := infrastructure.NewRedisQueue()
 	defer redisQueue.Close()
 
+	// MonsterGameRepository 초기화
+	monsterGameRepo, err := infrastructure.NewMonsterGameRepository(
+		os.Getenv("ETHEREUM_RPC_URL"),
+		os.Getenv("CONTRACT_ADDRESS"),
+		os.Getenv("PRIVATE_KEY"),
+	)
+	if err != nil {
+		log.Fatalf("Failed to initialize MonsterGameRepository: %v", err)
+	}
+
+	// GameService 초기화
+	gameService := application.NewGameService(monsterGameRepo)
+
 	// 라우터 설정
-	r := _interface.NewRouter(redisQueue)
+	r := _interface.NewRouter(redisQueue, gameService)
 
 	// HTTP 서버 생성
 	srv := &http.Server{
