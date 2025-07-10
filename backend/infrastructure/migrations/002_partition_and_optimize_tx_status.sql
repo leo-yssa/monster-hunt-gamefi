@@ -1,4 +1,4 @@
--- DB 성능 최적화를 위한 파티셔닝, 인덱스 및 설정
+-- tx_status 테이블 파티셔닝, 고급 인덱스, 뷰, 파티션 관리 함수 등 성능 최적화
 
 -- 1. 파티셔닝 설정 (기존 테이블을 파티셔닝으로 변경)
 -- 기존 테이블 백업
@@ -7,16 +7,18 @@ CREATE TABLE IF NOT EXISTS tx_status_backup AS SELECT * FROM tx_status;
 -- 기존 테이블 삭제
 DROP TABLE IF EXISTS tx_status;
 
--- 파티셔닝 테이블 생성
+-- 파티셔닝 테이블 생성 (PRIMARY KEY에 created_at 포함)
 CREATE TABLE tx_status (
-    id SERIAL PRIMARY KEY,
-    tx_hash VARCHAR(66) UNIQUE NOT NULL,
+    id SERIAL,
+    tx_hash VARCHAR(66) NOT NULL,
     action VARCHAR(32) NOT NULL,
     params JSONB,
     user_id VARCHAR(64),
     status VARCHAR(16) NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id, created_at),
+    UNIQUE (tx_hash, created_at)
 ) PARTITION BY RANGE (created_at);
 
 -- 2. 파티션 생성 (오늘 기준으로 현재 월부터 3개월)
@@ -79,11 +81,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 7. 미래 3개월 파티션 자동 생성 (오늘 기준)
+-- 7. 미래 3개월 파티션 자동 생성 (오늘 기준, date 캐스팅)
 -- 현재: 2025년 7월 → 미래 3개월: 2025년 10월, 11월, 12월
-SELECT create_tx_status_partition(CURRENT_DATE + INTERVAL '3 month');  -- 2025-10
-SELECT create_tx_status_partition(CURRENT_DATE + INTERVAL '4 month');  -- 2025-11  
-SELECT create_tx_status_partition(CURRENT_DATE + INTERVAL '5 month');  -- 2025-12
+SELECT create_tx_status_partition((CURRENT_DATE + INTERVAL '3 month')::date);  -- 2025-10
+SELECT create_tx_status_partition((CURRENT_DATE + INTERVAL '4 month')::date);  -- 2025-11  
+SELECT create_tx_status_partition((CURRENT_DATE + INTERVAL '5 month')::date);  -- 2025-12
 
 -- 8. 성능 모니터링 뷰 생성
 CREATE OR REPLACE VIEW tx_status_stats AS

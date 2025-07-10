@@ -73,8 +73,23 @@ monster-hunt-gamefi/
   - `tx_status` 테이블 및 기본 인덱스 생성
   - 파티셔닝 없이 단일 테이블로 시작
 - **002_partition_and_optimize_tx_status.sql**
-  - `tx_status` 테이블을 파티셔닝 테이블로 변경
+  - `tx_status` 테이블을 파티셔닝 테이블로 변경 (PRIMARY KEY, UNIQUE 제약에 파티션 키 포함)
   - 월별 파티션 생성, 인덱스, 통계 뷰, 파티션 관리 함수 등 포함
+
+### 📝 마이그레이션 적용 방법 예시
+
+**Docker Compose 환경에서 Postgres 컨테이너에 접속 후:**
+```bash
+# Postgres 컨테이너 내부에서 실행
+psql -U postgres -d monster_gamefi -f /docker-entrypoint-initdb.d/001_create_tx_status.sql
+psql -U postgres -d monster_gamefi -f /docker-entrypoint-initdb.d/002_partition_and_optimize_tx_status.sql
+```
+
+**로컬 환경에서 직접 실행:**
+```bash
+psql -h localhost -U postgres -d monster_gamefi -f backend/infrastructure/migrations/001_create_tx_status.sql
+psql -h localhost -U postgres -d monster_gamefi -f backend/infrastructure/migrations/002_partition_and_optimize_tx_status.sql
+```
 
 ---
 
