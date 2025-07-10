@@ -99,7 +99,7 @@ func InitGormDBFromEnv() (*gorm.DB, error) {
 	sqlDB.SetConnMaxLifetime(time.Hour) // 연결 최대 수명
 	sqlDB.SetConnMaxIdleTime(15 * time.Minute) // 유휴 연결 타임아웃
 	
-	if err := db.AutoMigrate(&TxStatus{}); err != nil {
+	if err := db.AutoMigrate(&TxStatus{}, &MonsterHuntedEvent{}, &PlayerRegisteredEvent{}); err != nil {
 		return nil, err
 	}
 	return db, nil

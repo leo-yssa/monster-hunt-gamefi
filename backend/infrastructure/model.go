@@ -16,6 +16,10 @@ type TxStatus struct {
 	UpdatedAt time.Time
 }
 
+func (TxStatus) TableName() string {
+	return "tx_status"
+}
+
 type MonsterHuntedEvent struct {
 	ID        uint `gorm:"primaryKey"`
 	TxHash    string
@@ -25,6 +29,10 @@ type MonsterHuntedEvent struct {
 	CreatedAt time.Time
 }
 
+func (MonsterHuntedEvent) TableName() string {
+	return "monster_hunted_event"
+}
+
 type PlayerRegisteredEvent struct {
 	ID        uint `gorm:"primaryKey"`
 	TxHash    string
@@ -32,3 +40,7 @@ type PlayerRegisteredEvent struct {
 	Name      string
 	CreatedAt time.Time
 } 
+
+func (PlayerRegisteredEvent) TableName() string {
+	return "player_registered_event"
+}
