@@ -19,6 +19,8 @@ import (
 	ginlimiter "github.com/ulule/limiter/v3/drivers/middleware/gin"
 	memory "github.com/ulule/limiter/v3/drivers/store/memory"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"io"
+	"bytes"
 )
 
 // --- Request Structs for Swagger ---
@@ -33,7 +35,7 @@ type AddMonsterRequest struct {
 }
 
 type HuntMonsterRequest struct {
-	MonsterID int64 `json:"monster_id" binding:"required,min=0"`
+	MonsterID int `json:"monster_id" binding:"min=0"`
 }
 
 // 보안 미들웨어: 클라이언트 IP 로깅 및 검증
@@ -150,6 +152,11 @@ func AddMonsterHandler(redisQueue *infrastructure.RedisQueue, gameService *appli
 // @Router /hunt [post]
 func HuntMonsterHandler(redisQueue *infrastructure.RedisQueue, gameService *application.GameService) gin.HandlerFunc {
 	return MakeTxQueueHandler("hunt", func(c *gin.Context) (map[string]interface{}, error) {
+		// 요청 body 출력 (디버깅용)
+		body, _ := io.ReadAll(c.Request.Body)
+		log.Printf("[DEBUG] RAW BODY: %s", string(body))
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(body)) // body 복구
+
 		var req HuntMonsterRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			return nil, err
