@@ -9,14 +9,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/leo-yssa/monster-hunt-gamefi/backend/infrastructure"
+	"github.com/leo-yssa/monster-hunt-gamefi/backend/config"
+	"github.com/leo-yssa/monster-hunt-gamefi/backend/core/domain"
+	"github.com/leo-yssa/monster-hunt-gamefi/backend/core/infrastructure"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"gorm.io/gorm"
+	"github.com/joho/godotenv"
 	"github.com/ethereum/go-ethereum/common"
 )
 
 type ConfirmationWorker struct {
-	db     *gorm.DB
+	repo   domain.TxStatusRepository
 	client *ethclient.Client
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -24,27 +26,15 @@ type ConfirmationWorker struct {
 	shutdown chan struct{}
 }
 
-func NewConfirmationWorker() (*ConfirmationWorker, error) {
-	db, err := infrastructure.InitGormDBFromEnv()
-	if err != nil {
-		return nil, err
-	}
-	
-	rpcURL := infrastructure.LoadEnvOrDefault("MONSTER_GAME_RPC", "http://localhost:8545")
-	client, err := ethclient.Dial(rpcURL)
-	if err != nil {
-		return nil, err
-	}
-
+func NewConfirmationWorker(repo domain.TxStatusRepository, client *ethclient.Client) *ConfirmationWorker {
 	ctx, cancel := context.WithCancel(context.Background())
-
 	return &ConfirmationWorker{
-		db:       db,
-		client:   client,
-		ctx:      ctx,
-		cancel:   cancel,
+		repo:   repo,
+		client: client,
+		ctx:    ctx,
+		cancel: cancel,
 		shutdown: make(chan struct{}),
-	}, nil
+	}
 }
 
 func (cw *ConfirmationWorker) Start() {
@@ -79,8 +69,8 @@ func (cw *ConfirmationWorker) processConfirmations() {
 			return
 		default:
 			// Pending 트랜잭션 조회
-			var pendings []infrastructure.TxStatus
-			if err := cw.db.WithContext(cw.ctx).Where("status = ?", "pending").Find(&pendings).Error; err != nil {
+			pendings, err := cw.repo.FindPendingTxs(cw.ctx)
+			if err != nil {
 				log.Printf("[CONFIRMATION WORKER] DB 조회 에러: %v", err)
 				time.Sleep(5 * time.Second)
 				continue
@@ -98,7 +88,7 @@ func (cw *ConfirmationWorker) processConfirmations() {
 	}
 }
 
-func (cw *ConfirmationWorker) checkAndUpdateTxStatus(tx *infrastructure.TxStatus) {
+func (cw *ConfirmationWorker) checkAndUpdateTxStatus(tx *domain.TxStatus) {
 	defer cw.wg.Done()
 
 	// SafeExecute로 안전한 상태 확인
@@ -122,20 +112,14 @@ func (cw *ConfirmationWorker) checkAndUpdateTxStatus(tx *infrastructure.TxStatus
 
 			if receipt.Status == 1 {
 				// pending 상태인 경우에만 success로 업데이트 (동시성 제어)
-				result := cw.db.WithContext(updateCtx).Model(tx).
-					Where("status = ?", "pending").
-					Update("status", "success")
-				
-				if result.RowsAffected > 0 {
+				err := cw.repo.UpdateTxStatus(updateCtx, tx.TxHash, "success")
+				if err == nil {
 					log.Printf("[CONFIRMATION] tx %s success", tx.TxHash)
 				}
 			} else {
 				// pending 상태인 경우에만 fail로 업데이트 (동시성 제어)
-				result := cw.db.WithContext(updateCtx).Model(tx).
-					Where("status = ?", "pending").
-					Update("status", "fail")
-				
-				if result.RowsAffected > 0 {
+				err := cw.repo.UpdateTxStatus(updateCtx, tx.TxHash, "fail")
+				if err == nil {
 					log.Printf("[CONFIRMATION] tx %s fail", tx.TxHash)
 				}
 			}
@@ -146,6 +130,45 @@ func (cw *ConfirmationWorker) checkAndUpdateTxStatus(tx *infrastructure.TxStatus
 
 	if err != nil {
 		log.Printf("[CONFIRMATION] SafeExecute 실패: %v", err)
+	}
+}
+
+const (
+	PendingTimeout      = 30 * time.Minute
+	PendingBlockWindow  = 20
+)
+
+func (cw *ConfirmationWorker) checkAndExpirePendingTxs() {
+	now := time.Now()
+	currentBlock, err := cw.client.BlockNumber(cw.ctx)
+	if err != nil {
+		log.Printf("[CONFIRMATION WORKER] 블록 넘버 조회 실패: %v", err)
+		return
+	}
+	txs, err := cw.repo.FindPendingTxs(cw.ctx)
+	if err != nil {
+		log.Printf("[CONFIRMATION WORKER] pending 트랜잭션 조회 실패: %v", err)
+		return
+	}
+	for _, tx := range txs {
+		// created_at 기준 시간 초과
+		if now.Sub(tx.CreatedAt) > PendingTimeout {
+			cw.expireTx(&tx, "timeout")
+			continue
+		}
+		// 블록 기준 초과 (tx_status에 submitted_block 필드가 있다고 가정)
+		if tx.SubmittedBlock > 0 && currentBlock > tx.SubmittedBlock+PendingBlockWindow {
+			cw.expireTx(&tx, "block_window")
+		}
+	}
+}
+
+func (cw *ConfirmationWorker) expireTx(tx *domain.TxStatus, reason string) {
+	tx.Status = "expired"
+	if err := cw.repo.UpdateTxStatus(context.Background(), tx.TxHash, "expired"); err != nil {
+		log.Printf("[CONFIRMATION WORKER] 트랜잭션 만료 처리 실패: %v", err)
+	} else {
+		log.Printf("[CONFIRMATION WORKER] 트랜잭션 만료 처리: %s, reason=%s", tx.TxHash, reason)
 	}
 }
 
@@ -177,21 +200,25 @@ func (cw *ConfirmationWorker) GracefulShutdown() {
 		cw.client.Close()
 	}
 
-	if cw.db != nil {
-		sqlDB, err := cw.db.DB()
-		if err == nil {
-			sqlDB.Close()
-		}
-	}
+	// DB 리소스는 프로그램 종료 시 자동으로 해제되므로 여기서는 별도 처리 안 함
 
 	log.Println("[CONFIRMATION WORKER] 그레이스풀 종료 완료")
 }
 
 func main() {
-	worker, err := NewConfirmationWorker()
+	_ = godotenv.Load()
+	db, err := config.InitGormDBFromEnv()
 	if err != nil {
-		log.Fatalf("[CONFIRMATION WORKER] 워커 초기화 실패: %v", err)
+		log.Fatalf("DB 초기화 실패: %v", err)
+	}
+	repo := infrastructure.NewTxStatusRepository(db)
+
+	rpcURL := config.LoadEnvOrDefault("MONSTER_GAME_RPC", "http://localhost:8545")
+	client, err := ethclient.Dial(rpcURL)
+	if err != nil {
+		log.Fatalf("이더리움 클라이언트 연결 실패: %v", err)
 	}
 
+	worker := NewConfirmationWorker(repo, client)
 	worker.Start()
 } 

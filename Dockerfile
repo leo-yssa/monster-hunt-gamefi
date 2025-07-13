@@ -5,10 +5,10 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod tidy
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o api ./cmd/api/main.go
-RUN CGO_ENABLED=0 GOOS=linux go build -o worker ./cmd/worker/main.go
-RUN CGO_ENABLED=0 GOOS=linux go build -o confirmation_worker ./cmd/confirmation_worker/main.go
-RUN CGO_ENABLED=0 GOOS=linux go build -o event_indexer ./cmd/event_indexer/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o api ./backend/cmd/api/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o worker ./backend/cmd/worker/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o confirmation_worker ./backend/cmd/confirmation_worker/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o event_indexer ./backend/cmd/event_indexer/main.go
 
 FROM gcr.io/distroless/base-debian11
 WORKDIR /app

@@ -1,0 +1,164 @@
+definitions:
+  backend_interface.AddMonsterRequest:
+    properties:
+      hp:
+        maximum: 10000
+        minimum: 1
+        type: integer
+      name:
+        maxLength: 50
+        minLength: 1
+        type: string
+      reward:
+        maximum: 1000000
+        minimum: 1
+        type: integer
+    required:
+    - hp
+    - name
+    - reward
+    type: object
+  backend_interface.BackfillRequest:
+    properties:
+      from_block:
+        minimum: 0
+        type: integer
+      to_block:
+        minimum: 0
+        type: integer
+    type: object
+  backend_interface.HuntMonsterRequest:
+    properties:
+      monster_id:
+        minimum: 0
+        type: integer
+    type: object
+  backend_interface.RegisterPlayerRequest:
+    properties:
+      name:
+        maxLength: 32
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  github_com_leo-yssa_monster-hunt-gamefi_backend_infrastructure.BackfillResult:
+    properties:
+      completed_at:
+        type: string
+      duration:
+        type: string
+      from_block:
+        type: integer
+      inserted:
+        type: integer
+      skipped:
+        type: integer
+      to_block:
+        type: integer
+      total_logs:
+        type: integer
+    type: object
+info:
+  contact: {}
+paths:
+  /admin/backfill:
+    post:
+      consumes:
+      - application/json
+      description: 지정된 블록 범위의 이벤트를 백필드로 인덱싱
+      parameters:
+      - description: 백필드 정보
+        in: body
+        name: backfill
+        required: true
+        schema:
+          $ref: '#/definitions/backend_interface.BackfillRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_leo-yssa_monster-hunt-gamefi_backend_infrastructure.BackfillResult'
+      summary: 이벤트 백필드
+  /hunt:
+    post:
+      consumes:
+      - application/json
+      description: address와 monster_id로 사냥
+      parameters:
+      - description: 사냥 정보
+        in: body
+        name: hunt
+        required: true
+        schema:
+          $ref: '#/definitions/backend_interface.HuntMonsterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+      summary: 사냥
+  /metrics:
+    get:
+      consumes:
+      - application/json
+      description: 프로메테우스 형식의 메트릭 노출
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+      summary: 프로메테우스 메트릭
+  /monsters:
+    post:
+      consumes:
+      - application/json
+      description: name, hp, reward로 몬스터 추가
+      parameters:
+      - description: 몬스터 정보
+        in: body
+        name: monster
+        required: true
+        schema:
+          $ref: '#/definitions/backend_interface.AddMonsterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: 몬스터 추가
+  /players:
+    post:
+      consumes:
+      - application/json
+      description: address와 name으로 플레이어 등록
+      parameters:
+      - description: 플레이어 정보
+        in: body
+        name: player
+        required: true
+        schema:
+          $ref: '#/definitions/backend_interface.RegisterPlayerRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: 플레이어 등록
+swagger: "2.0"

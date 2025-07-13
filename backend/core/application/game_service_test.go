@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"github.com/leo-yssa/monster-hunt-gamefi/backend/core/domain"
 )
 
 // MockGameRepository 테스트용 모의 리포지토리
@@ -32,6 +33,22 @@ func (m *MockGameRepository) HuntMonster(ctx context.Context, monsterID int64) (
 		return m.huntMonsterFunc(ctx, monsterID)
 	}
 	return "", errors.New("not implemented")
+}
+
+// MockBackfillService 테스트용 모의 백필 서비스
+type MockBackfillService struct {
+	backfillEventsFunc func(ctx context.Context, fromBlock, toBlock int64) (*domain.BackfillResult, error)
+}
+
+func (m *MockBackfillService) BackfillEvents(ctx context.Context, fromBlock, toBlock int64) (*domain.BackfillResult, error) {
+	if m.backfillEventsFunc != nil {
+		return m.backfillEventsFunc(ctx, fromBlock, toBlock)
+	}
+	return nil, errors.New("not implemented")
+}
+
+func TestGameService_ImplementsDomainInterface(t *testing.T) {
+	var _ domain.GameService = NewGameService(&MockGameRepository{}, &MockBackfillService{})
 }
 
 func TestGameService_RegisterPlayer(t *testing.T) {
@@ -65,7 +82,7 @@ func TestGameService_RegisterPlayer(t *testing.T) {
 				registerPlayerFunc: tt.mockFunc,
 			}
 			
-			service := NewGameService(mockRepo)
+			service := NewGameService(mockRepo, nil)
 			ctx := context.Background()
 			
 			result, err := service.RegisterPlayer(ctx, tt.playerName)
@@ -123,7 +140,7 @@ func TestGameService_AddMonster(t *testing.T) {
 				addMonsterFunc: tt.mockFunc,
 			}
 			
-			service := NewGameService(mockRepo)
+			service := NewGameService(mockRepo, nil)
 			ctx := context.Background()
 			
 			result, err := service.AddMonster(ctx, tt.monsterName, tt.hp, tt.reward)
@@ -175,7 +192,7 @@ func TestGameService_HuntMonster(t *testing.T) {
 				huntMonsterFunc: tt.mockFunc,
 			}
 			
-			service := NewGameService(mockRepo)
+			service := NewGameService(mockRepo, nil)
 			ctx := context.Background()
 			
 			result, err := service.HuntMonster(ctx, tt.monsterID)
@@ -190,6 +207,70 @@ func TestGameService_HuntMonster(t *testing.T) {
 				}
 				if result == "" {
 					t.Errorf("예상된 결과가 비어있습니다")
+				}
+			}
+		})
+	}
+}
+
+func TestGameService_BackfillEvents(t *testing.T) {
+	tests := []struct {
+		name          string
+		fromBlock     int64
+		toBlock       int64
+		mockFunc      func(ctx context.Context, fromBlock, toBlock int64) (*domain.BackfillResult, error)
+		expectedError bool
+	}{
+		{
+			name:      "성공적인 백필",
+			fromBlock: 1000,
+			toBlock:   2000,
+			mockFunc: func(ctx context.Context, fromBlock, toBlock int64) (*domain.BackfillResult, error) {
+				return &domain.BackfillResult{
+					FromBlock: fromBlock,
+					ToBlock:   toBlock,
+					Inserted:  10,
+					Skipped:   5,
+				}, nil
+			},
+			expectedError: false,
+		},
+		{
+			name:      "백필 서비스 없음",
+			fromBlock: 1000,
+			toBlock:   2000,
+			mockFunc:  nil,
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var mockBackfillService domain.BackfillService
+			if tt.mockFunc != nil {
+				mockBackfillService = &MockBackfillService{
+					backfillEventsFunc: tt.mockFunc,
+				}
+			} else {
+				mockBackfillService = &MockBackfillService{
+					backfillEventsFunc: func(ctx context.Context, fromBlock, toBlock int64) (*domain.BackfillResult, error) {
+						return nil, errors.New("mock not implemented")
+					},
+				}
+			}
+			service := NewGameService(&MockGameRepository{}, mockBackfillService)
+			ctx := context.Background()
+			result, err := service.BackfillEvents(ctx, tt.fromBlock, tt.toBlock)
+			if tt.expectedError {
+				if err == nil {
+					t.Errorf("예상된 에러가 발생하지 않았습니다")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("예상치 못한 에러: %v", err)
+				}
+				if result == nil {
+					t.Errorf("예상된 결과가 nil입니다")
 				}
 			}
 		})

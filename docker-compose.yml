@@ -117,6 +117,8 @@ services:
           cpus: '0.25'
     restart: unless-stopped
 
+
+
   postgres:
     image: postgres:15
     environment:
@@ -128,7 +130,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./backend/infrastructure/migrations:/docker-entrypoint-initdb.d
+      - ./backend/core/infrastructure/migrations:/docker-entrypoint-initdb.d
     command: >
       postgres
       -c shared_buffers=256MB

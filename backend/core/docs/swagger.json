@@ -1,0 +1,249 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "contact": {}
+    },
+    "paths": {
+        "/admin/backfill": {
+            "post": {
+                "description": "지정된 블록 범위의 이벤트를 백필드로 인덱싱",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "이벤트 백필드",
+                "parameters": [
+                    {
+                        "description": "백필드 정보",
+                        "name": "backfill",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/backend_interface.BackfillRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_leo-yssa_monster-hunt-gamefi_backend_infrastructure.BackfillResult"
+                        }
+                    }
+                }
+            }
+        },
+        "/hunt": {
+            "post": {
+                "description": "address와 monster_id로 사냥",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "사냥",
+                "parameters": [
+                    {
+                        "description": "사냥 정보",
+                        "name": "hunt",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/backend_interface.HuntMonsterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/metrics": {
+            "get": {
+                "description": "프로메테우스 형식의 메트릭 노출",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/plain"
+                ],
+                "summary": "프로메테우스 메트릭",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/monsters": {
+            "post": {
+                "description": "name, hp, reward로 몬스터 추가",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "몬스터 추가",
+                "parameters": [
+                    {
+                        "description": "몬스터 정보",
+                        "name": "monster",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/backend_interface.AddMonsterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/players": {
+            "post": {
+                "description": "address와 name으로 플레이어 등록",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "플레이어 등록",
+                "parameters": [
+                    {
+                        "description": "플레이어 정보",
+                        "name": "player",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/backend_interface.RegisterPlayerRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "backend_interface.AddMonsterRequest": {
+            "type": "object",
+            "required": [
+                "hp",
+                "name",
+                "reward"
+            ],
+            "properties": {
+                "hp": {
+                    "type": "integer",
+                    "maximum": 10000,
+                    "minimum": 1
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 1
+                },
+                "reward": {
+                    "type": "integer",
+                    "maximum": 1000000,
+                    "minimum": 1
+                }
+            }
+        },
+        "backend_interface.BackfillRequest": {
+            "type": "object",
+            "properties": {
+                "from_block": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "to_block": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "backend_interface.HuntMonsterRequest": {
+            "type": "object",
+            "properties": {
+                "monster_id": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "backend_interface.RegisterPlayerRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 1
+                }
+            }
+        },
+        "github_com_leo-yssa_monster-hunt-gamefi_backend_infrastructure.BackfillResult": {
+            "type": "object",
+            "properties": {
+                "completed_at": {
+                    "type": "string"
+                },
+                "duration": {
+                    "type": "string"
+                },
+                "from_block": {
+                    "type": "integer"
+                },
+                "inserted": {
+                    "type": "integer"
+                },
+                "skipped": {
+                    "type": "integer"
+                },
+                "to_block": {
+                    "type": "integer"
+                },
+                "total_logs": {
+                    "type": "integer"
+                }
+            }
+        }
+    }
+}

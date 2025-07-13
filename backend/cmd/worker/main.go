@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/leo-yssa/monster-hunt-gamefi/backend/infrastructure"
+	"github.com/joho/godotenv"
+	"github.com/leo-yssa/monster-hunt-gamefi/backend/config"
+	"github.com/leo-yssa/monster-hunt-gamefi/backend/core/domain"
+	"github.com/leo-yssa/monster-hunt-gamefi/backend/core/infrastructure"
 	"gorm.io/datatypes"
-	"gorm.io/gorm"
 )
 
 type TxRequest struct {
@@ -25,8 +27,8 @@ type TxRequest struct {
 
 type Worker struct {
 	rdb            *redis.Client
-	db             *gorm.DB
-	monsterGameRepo *infrastructure.MonsterGameRepository
+	repo           domain.TxStatusRepository
+	monsterGameAdapter *infrastructure.MonsterGameAdapter
 	queueName      string
 	ctx            context.Context
 	cancel         context.CancelFunc
@@ -34,29 +36,17 @@ type Worker struct {
 	shutdown       chan struct{}
 }
 
-func NewWorker() (*Worker, error) {
-	rdb := infrastructure.InitRedisClientFromEnv()
-	db, err := infrastructure.InitGormDBFromEnv()
-	if err != nil {
-		return nil, fmt.Errorf("Postgres DB 초기화 실패: %v", err)
-	}
-
-	monsterGameRepo, err := infrastructure.InitMonsterGameRepoFromEnv()
-	if err != nil {
-		return nil, fmt.Errorf("컨트랙트 연동 초기화 실패: %v", err)
-	}
-
+func NewWorker(rdb *redis.Client, repo domain.TxStatusRepository, monsterGameAdapter *infrastructure.MonsterGameAdapter) *Worker {
 	ctx, cancel := context.WithCancel(context.Background())
-
 	return &Worker{
 		rdb:            rdb,
-		db:             db,
-		monsterGameRepo: monsterGameRepo,
+		repo:           repo,
+		monsterGameAdapter: monsterGameAdapter,
 		queueName:      "tx_queue",
 		ctx:            ctx,
 		cancel:         cancel,
 		shutdown:       make(chan struct{}),
-	}, nil
+	}
 }
 
 func (w *Worker) Start() {
@@ -139,7 +129,7 @@ func (w *Worker) processTransaction(req TxRequest) {
 			case "register":
 				name, _ := req.Params["name"].(string)
 				var err error
-				txHash, err = w.monsterGameRepo.RegisterPlayer(w.ctx, name)
+				txHash, err = w.monsterGameAdapter.RegisterPlayer(w.ctx, name)
 				if err != nil {
 					errMsg = err.Error()
 					status = "fail"
@@ -152,7 +142,7 @@ func (w *Worker) processTransaction(req TxRequest) {
 				hp, _ := toInt(req.Params["hp"])
 				reward, _ := toInt(req.Params["reward"])
 				var err error
-				txHash, err = w.monsterGameRepo.AddMonster(w.ctx, name, hp, reward)
+				txHash, err = w.monsterGameAdapter.AddMonster(w.ctx, name, hp, reward)
 				if err != nil {
 					errMsg = err.Error()
 					status = "fail"
@@ -162,7 +152,7 @@ func (w *Worker) processTransaction(req TxRequest) {
 			case "hunt":
 				monsterID, _ := toInt64(req.Params["monster_id"])
 				var err error
-				txHash, err = w.monsterGameRepo.HuntMonster(w.ctx, monsterID)
+				txHash, err = w.monsterGameAdapter.HuntMonster(w.ctx, monsterID)
 				if err != nil {
 					errMsg = err.Error()
 					status = "fail"
@@ -185,21 +175,29 @@ func (w *Worker) processTransaction(req TxRequest) {
 		dbCtx, dbCancel := context.WithTimeout(w.ctx, 10*time.Second)
 		defer dbCancel()
 
+		var submittedBlock uint64 = 0
 		if txHash != "" {
-			w.db.WithContext(dbCtx).Create(&infrastructure.TxStatus{
+			// 트랜잭션 전송 후 현재 블록 넘버 조회
+			blockNum, err := w.monsterGameAdapter.Client().BlockNumber(w.ctx)
+			if err == nil {
+				submittedBlock = blockNum
+			}
+			w.repo.CreateTxStatus(dbCtx, &domain.TxStatus{
 				TxHash:  txHash,
 				Action:  req.Action,
-				Params:  paramsJSON,
+				Params:  string(paramsJSON),
 				UserID:  req.User,
 				Status:  status,
+				SubmittedBlock: submittedBlock,
 			})
 		} else if errMsg != "" {
-			w.db.WithContext(dbCtx).Create(&infrastructure.TxStatus{
+			w.repo.CreateTxStatus(dbCtx, &domain.TxStatus{
 				TxHash:  "",
 				Action:  req.Action,
-				Params:  paramsJSON,
+				Params:  string(paramsJSON),
 				UserID:  req.User,
 				Status:  status,
+				SubmittedBlock: 0,
 			})
 		}
 
@@ -239,22 +237,33 @@ func (w *Worker) GracefulShutdown() {
 		w.rdb.Close()
 	}
 
-	if w.db != nil {
-		sqlDB, err := w.db.DB()
-		if err == nil {
-			sqlDB.Close()
-		}
-	}
+	// w.db 사용 부분을 w.repo로 변경
+	// if w.db != nil {
+	// 	sqlDB, err := w.db.DB()
+	// 	if err == nil {
+	// 		sqlDB.Close()
+	// 	}
+	// }
 
 	log.Println("[WORKER] 그레이스풀 종료 완료")
 }
 
 func main() {
-	worker, err := NewWorker()
+	_ = godotenv.Load()
+
+	rdb := config.InitRedisClientFromEnv()
+	db, err := config.InitGormDBFromEnv()
 	if err != nil {
-		log.Fatalf("[WORKER] 워커 초기화 실패: %v", err)
+		log.Fatalf("Postgres DB 초기화 실패: %v", err)
+	}
+	repo := infrastructure.NewTxStatusRepository(db)
+
+	monsterGameAdapter, err := infrastructure.InitMonsterGameAdapterFromEnv()
+	if err != nil {
+		log.Fatalf("컨트랙트 연동 초기화 실패: %v", err)
 	}
 
+	worker := NewWorker(rdb, repo, monsterGameAdapter)
 	worker.Start()
 }
 

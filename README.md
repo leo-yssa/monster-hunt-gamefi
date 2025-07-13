@@ -45,17 +45,19 @@ monster-hunt-gamefi/
 │   └── MonsterGame.test.ts  # 프록시 업그레이드/상태 유지/보안 테스트 포함
 ├── artifacts/                # 컴파일 산출물(ABI 등)
 ├── backend/
-│   ├── application/          # 서비스 계층
-│   ├── domain/               # 도메인 모델
-│   ├── infrastructure/       # 이더리움/Redis/DB 연동 + 보안 유틸리티
-│   │   ├── security.go      # 보안 유틸리티 (GetClientIP, SafeExecute, RetryWithBackoff 등)
-│   │   ├── redis_queue.go   # Redis 큐 관리 (Close 메서드 추가)
-│   │   └── ...
-│   └── interface/            # API 라우터 및 Swagger
-├── cmd/
-│   ├── api/                  # API 서버 엔트리포인트 (그레이스풀 종료 지원)
-│   ├── worker/               # 트랜잭션 제출 워커 (그레이스풀 종료 + 재시도 로직)
-│   └── confirmation_worker/  # 트랜잭션 상태 확인 워커 (동시성 제어)
+│   ├── core/                 # 핵심 비즈니스 로직
+│   │   ├── application/      # 서비스 계층
+│   │   ├── domain/           # 도메인 모델 & 인터페이스
+│   │   ├── infrastructure/   # 외부 시스템 연동 (이더리움/Redis/DB)
+│   │   └── interface/        # API 라우터 및 Swagger
+│   ├── config/               # 환경설정 관련 Go 파일
+│   ├── docs/                 # Swagger 문서 (swagger.yaml, swagger.json)
+│   ├── cmd/                  # 엔트리포인트
+│   │   ├── api/              # API 서버 (그레이스풀 종료 지원)
+│   │   ├── worker/           # 트랜잭션 제출 워커 (재시도 로직)
+│   │   ├── confirmation_worker/ # 트랜잭션 상태 확인 워커
+│   │   └── event_indexer/    # 블록체인 이벤트 인덱서
+│   └── docs/                 # Swagger 문서
 ├── monitoring/               # Prometheus + Grafana 모니터링
 │   ├── prometheus/
 │   └── grafana/
@@ -75,6 +77,8 @@ monster-hunt-gamefi/
 - **002_partition_and_optimize_tx_status.sql**
   - `tx_status` 테이블을 파티셔닝 테이블로 변경 (PRIMARY KEY, UNIQUE 제약에 파티션 키 포함)
   - 월별 파티션 생성, 인덱스, 통계 뷰, 파티션 관리 함수 등 포함
+- **003_create_event_tables.sql**
+  - 몬스터 사냥/플레이어 등록 이벤트 테이블(`monster_hunted_events`, `player_registered_events`) 생성
 
 ### 📝 마이그레이션 적용 방법 예시
 
@@ -83,12 +87,14 @@ monster-hunt-gamefi/
 # Postgres 컨테이너 내부에서 실행
 psql -U postgres -d monster_gamefi -f /docker-entrypoint-initdb.d/001_create_tx_status.sql
 psql -U postgres -d monster_gamefi -f /docker-entrypoint-initdb.d/002_partition_and_optimize_tx_status.sql
+psql -U postgres -d monster_gamefi -f /docker-entrypoint-initdb.d/003_create_event_tables.sql
 ```
 
 **로컬 환경에서 직접 실행:**
 ```bash
-psql -h localhost -U postgres -d monster_gamefi -f backend/infrastructure/migrations/001_create_tx_status.sql
-psql -h localhost -U postgres -d monster_gamefi -f backend/infrastructure/migrations/002_partition_and_optimize_tx_status.sql
+psql -h localhost -U postgres -d monster_gamefi -f backend/core/infrastructure/migrations/001_create_tx_status.sql
+psql -h localhost -U postgres -d monster_gamefi -f backend/core/infrastructure/migrations/002_partition_and_optimize_tx_status.sql
+psql -h localhost -U postgres -d monster_gamefi -f backend/core/infrastructure/migrations/003_create_event_tables.sql
 ```
 
 ---
@@ -110,6 +116,7 @@ psql -h localhost -U postgres -d monster_gamefi -f backend/infrastructure/migrat
 - **상태/로직 분리, 안전한 업그레이드 지원**
 - **API 서버 ↔ Redis 큐 ↔ worker ↔ 이더리움** 구조로 확장성/운영 자동화 실현
 - **트랜잭션 상태 추적**: Postgres에 트랜잭션 상태(pending/success/fail) 저장, confirmation_worker가 receipt 확인 및 상태 업데이트
+- **이벤트 인덱서(event_indexer)**: 블록체인 이벤트를 실시간으로 수집하여 DB(이벤트 테이블)에 기록
 - **Swagger 문서 자동 생성/노출**: http://localhost:8080/swagger/index.html
 
 ### 🔒 보안 및 안정성 기능

@@ -12,6 +12,7 @@ type TxStatus struct {
 	Params    datatypes.JSON `gorm:"type:jsonb"`
 	UserID    string         `gorm:"size:64"`
 	Status    string         `gorm:"size:16;not null;default:pending"`
+	SubmittedBlock uint64    `gorm:"default:0"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
