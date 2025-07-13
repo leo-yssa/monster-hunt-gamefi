@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/go-redis/redis/v8"
 	"github.com/joho/godotenv"
 	"github.com/leo-yssa/monster-hunt-gamefi/backend/config"
@@ -28,7 +29,10 @@ type TxRequest struct {
 type Worker struct {
 	rdb            *redis.Client
 	repo           domain.TxStatusRepository
-	monsterGameAdapter *infrastructure.MonsterGameAdapter
+	monsterGame    domain.MonsterGamePort
+	curveLPToken   domain.CurveLPTokenPort
+	curveLPStaking domain.CurveLPStakingPort
+	privKeyHex     string
 	queueName      string
 	ctx            context.Context
 	cancel         context.CancelFunc
@@ -36,12 +40,15 @@ type Worker struct {
 	shutdown       chan struct{}
 }
 
-func NewWorker(rdb *redis.Client, repo domain.TxStatusRepository, monsterGameAdapter *infrastructure.MonsterGameAdapter) *Worker {
+func NewWorker(rdb *redis.Client, repo domain.TxStatusRepository, monsterGame domain.MonsterGamePort, curveLPToken domain.CurveLPTokenPort, curveLPStaking domain.CurveLPStakingPort, privKeyHex string) *Worker {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Worker{
 		rdb:            rdb,
 		repo:           repo,
-		monsterGameAdapter: monsterGameAdapter,
+		monsterGame:    monsterGame,
+		curveLPToken:   curveLPToken,
+		curveLPStaking: curveLPStaking,
+		privKeyHex:     privKeyHex,
 		queueName:      "tx_queue",
 		ctx:            ctx,
 		cancel:         cancel,
@@ -124,12 +131,12 @@ func (w *Worker) processTransaction(req TxRequest) {
 		}
 
 		// RetryWithBackoff로 트랜잭션 처리 안정성 확보
-		err := infrastructure.RetryWithBackoff(w.ctx, func() error {
+		var err error
+		err = infrastructure.RetryWithBackoff(w.ctx, func() error {
 			switch req.Action {
 			case "register":
 				name, _ := req.Params["name"].(string)
-				var err error
-				txHash, err = w.monsterGameAdapter.RegisterPlayer(w.ctx, name)
+				txHash, err = w.monsterGame.RegisterPlayer(w.ctx, name)
 				if err != nil {
 					errMsg = err.Error()
 					status = "fail"
@@ -141,8 +148,7 @@ func (w *Worker) processTransaction(req TxRequest) {
 				name, _ := req.Params["name"].(string)
 				hp, _ := toInt(req.Params["hp"])
 				reward, _ := toInt(req.Params["reward"])
-				var err error
-				txHash, err = w.monsterGameAdapter.AddMonster(w.ctx, name, hp, reward)
+				txHash, err = w.monsterGame.AddMonster(w.ctx, name, hp, reward)
 				if err != nil {
 					errMsg = err.Error()
 					status = "fail"
@@ -151,8 +157,7 @@ func (w *Worker) processTransaction(req TxRequest) {
 				status = "pending"
 			case "hunt":
 				monsterID, _ := toInt64(req.Params["monster_id"])
-				var err error
-				txHash, err = w.monsterGameAdapter.HuntMonster(w.ctx, monsterID)
+				txHash, err = w.monsterGame.HuntMonster(w.ctx, monsterID)
 				if err != nil {
 					errMsg = err.Error()
 					status = "fail"
@@ -160,6 +165,26 @@ func (w *Worker) processTransaction(req TxRequest) {
 				} else {
 					status = "pending"
 				}
+			case "stakeCurveLP":
+				amount, _ := toInt64(req.Params["amount"])
+				privKeyHex, _ := req.Params["privKeyHex"].(string)
+				txHash, err = w.curveLPStaking.Stake(w.ctx, privKeyHex, amount)
+				if err != nil {
+					errMsg = err.Error()
+					status = "fail"
+					return err
+				}
+				status = "pending"
+			case "unstakeCurveLP":
+				amount, _ := toInt64(req.Params["amount"])
+				privKeyHex, _ := req.Params["privKeyHex"].(string)
+				txHash, err = w.curveLPStaking.Unstake(w.ctx, privKeyHex, amount)
+				if err != nil {
+					errMsg = err.Error()
+					status = "fail"
+					return err
+				}
+				status = "pending"
 			default:
 				return fmt.Errorf("알 수 없는 action: %s", req.Action)
 			}
@@ -177,10 +202,12 @@ func (w *Worker) processTransaction(req TxRequest) {
 
 		var submittedBlock uint64 = 0
 		if txHash != "" {
-			// 트랜잭션 전송 후 현재 블록 넘버 조회
-			blockNum, err := w.monsterGameAdapter.Client().BlockNumber(w.ctx)
-			if err == nil {
-				submittedBlock = blockNum
+			// 트랜잭션 전송 후 현재 블록 넘버 조회 (MonsterGameAdapter 타입일 때만)
+			if mgAdapter, ok := w.monsterGame.(*infrastructure.MonsterGameAdapter); ok {
+				blockNum, err := mgAdapter.Client().BlockNumber(w.ctx)
+				if err == nil {
+					submittedBlock = blockNum
+				}
 			}
 			w.repo.CreateTxStatus(dbCtx, &domain.TxStatus{
 				TxHash:  txHash,
@@ -237,14 +264,6 @@ func (w *Worker) GracefulShutdown() {
 		w.rdb.Close()
 	}
 
-	// w.db 사용 부분을 w.repo로 변경
-	// if w.db != nil {
-	// 	sqlDB, err := w.db.DB()
-	// 	if err == nil {
-	// 		sqlDB.Close()
-	// 	}
-	// }
-
 	log.Println("[WORKER] 그레이스풀 종료 완료")
 }
 
@@ -258,12 +277,32 @@ func main() {
 	}
 	repo := infrastructure.NewTxStatusRepository(db)
 
-	monsterGameAdapter, err := infrastructure.InitMonsterGameAdapterFromEnv()
-	if err != nil {
-		log.Fatalf("컨트랙트 연동 초기화 실패: %v", err)
+	// 환경변수에서 주소 읽기
+	rpcURL := config.LoadEnvOrDefault("MONSTER_GAME_RPC", "http://localhost:8545")
+	contractAddr := os.Getenv("MONSTER_GAME_CONTRACT")
+	privKeyHex := os.Getenv("MONSTER_GAME_PRIVKEY")
+	curveLPTokenAddr := os.Getenv("CURVE_LP_TOKEN_CONTRACT")
+	curveLPStakingAddr := os.Getenv("CURVE_LP_STAKING_CONTRACT")
+	if contractAddr == "" || privKeyHex == "" || curveLPTokenAddr == "" || curveLPStakingAddr == "" {
+		log.Fatal("컨트랙트 주소와 프라이빗키 환경변수(MONSTER_GAME_CONTRACT, MONSTER_GAME_PRIVKEY, CURVE_LP_TOKEN_CONTRACT, CURVE_LP_STAKING_CONTRACT)가 필요합니다.")
 	}
 
-	worker := NewWorker(rdb, repo, monsterGameAdapter)
+	client, err := ethclient.DialContext(context.Background(), rpcURL)
+	if err != nil {
+		log.Fatalf("이더리움 클라이언트 연결 실패: %v", err)
+	}
+
+	monsterGameAdapter, _ := infrastructure.NewMonsterGameAdapter(
+		client, contractAddr, privKeyHex,
+	)
+	curveLPTokenAdapter, _ := infrastructure.NewCurveLPTokenAdapter(
+		client, curveLPTokenAddr,
+	)
+	curveLPStakingAdapter, _ := infrastructure.NewCurveLPStakingAdapter(
+		client, curveLPStakingAddr,
+	)
+
+	worker := NewWorker(rdb, repo, monsterGameAdapter, curveLPTokenAdapter, curveLPStakingAdapter, privKeyHex)
 	worker.Start()
 }
 

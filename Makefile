@@ -1,6 +1,29 @@
 .PHONY: all contracts-test backend-test docker-build docker-up docker-down contracts-node contracts-deploy
 
-all: contracts-test backend-test
+ABIGEN=abigen
+ARTIFACTS=artifacts/contracts
+OUTDIR=backend/core/infrastructure
+CONTRACTS := CurveLPToken CurveLPStaking GovernorContract GovernanceToken MyGameToken MonsterGame MonsterGameV2
+
+# 각 컨트랙트별 jq로 abi/bin 추출 및 abigen 바인딩 생성
+
+define abigen_rule
+$(ARTIFACTS)/$(1).sol/$(1).abi: $(ARTIFACTS)/$(1).sol/$(1).json
+	jq .abi $(ARTIFACTS)/$(1).sol/$(1).json > $(ARTIFACTS)/$(1).sol/$(1).abi
+$(ARTIFACTS)/$(1).sol/$(1).bin: $(ARTIFACTS)/$(1).sol/$(1).json
+	jq -r .bytecode $(ARTIFACTS)/$(1).sol/$(1).json > $(ARTIFACTS)/$(1).sol/$(1).bin
+$(OUTDIR)/$(1).go: $(ARTIFACTS)/$(1).sol/$(1).abi $(ARTIFACTS)/$(1).sol/$(1).bin
+	$$(ABIGEN) --abi $(ARTIFACTS)/$(1).sol/$(1).abi --bin $(ARTIFACTS)/$(1).sol/$(1).bin --pkg infrastructure --type $(1) --out $$@
+endef
+
+$(foreach contract,$(CONTRACTS),$(eval $(call abigen_rule,$(contract))))
+
+all-abigen: $(foreach contract,$(CONTRACTS),$(OUTDIR)/$(contract).go)
+
+swag-docs:
+	swag init -g backend/cmd/api/main.go -o backend/core/docs
+
+all: swag-docs contracts-test backend-test
 
 node_modules:
 	[ -d node_modules ] || npm install

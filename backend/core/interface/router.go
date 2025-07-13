@@ -49,6 +49,13 @@ type Handler struct {
 	Monitor     *infrastructure.PrometheusMonitor
 }
 
+// --- Curve LP Staking 관련 Structs ---
+type StakeCurveLPRequest struct {
+    User      string `json:"user"`
+    Amount    int64  `json:"amount"`
+    PrivKeyHex string `json:"privKeyHex"`
+}
+
 // 보안 미들웨어: 클라이언트 IP 로깅 및 검증
 func SecurityMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -191,7 +198,7 @@ func (h *Handler) HuntMonsterHandler(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param backfill body BackfillRequest true "백필드 정보"
-// @Success 200 {object} infrastructure.BackfillResult
+// @Success 200 {object} domain.BackfillResult
 // @Router /admin/backfill [post]
 func (h *Handler) BackfillHandler(c *gin.Context) {
 	var req BackfillRequest
@@ -214,6 +221,68 @@ func (h *Handler) BackfillHandler(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, result)
+}
+
+// @Summary Curve LP 토큰 스테이킹
+// @Description Curve LP 토큰을 스테이킹합니다. (privKeyHex는 유저의 개인키이며, 실제 서비스에서는 절대 서버로 전달하면 안 됩니다. 테스트/개발용)
+// @Accept json
+// @Produce json
+// @Param stake body StakeCurveLPRequest true "스테이킹 정보 (user: 유저 주소, amount: 수량, privKeyHex: 유저 개인키)"
+// @Success 200 {object} map[string]string
+// @Router /stake/curve-lp [post]
+func (h *Handler) StakeCurveLPHandler(c *gin.Context) {
+    var req StakeCurveLPRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+    txID := uuid.New().String()
+    err := h.RedisQueue.PushTxRequest(context.Background(), infrastructure.TxRequest{
+        Action: "stakeCurveLP",
+        Params: map[string]interface{}{ "amount": req.Amount, "privKeyHex": req.PrivKeyHex },
+        User:   txID,
+    })
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"tx_id": txID, "status": "queued"})
+}
+
+// @Summary Curve LP 토큰 언스테이킹
+// @Description Curve LP 토큰을 언스테이킹합니다. (privKeyHex는 유저의 개인키이며, 실제 서비스에서는 절대 서버로 전달하면 안 됩니다. 테스트/개발용)
+// @Accept json
+// @Produce json
+// @Param unstake body StakeCurveLPRequest true "언스테이킹 정보 (user: 유저 주소, amount: 수량, privKeyHex: 유저 개인키)"
+// @Success 200 {object} map[string]string
+// @Router /unstake/curve-lp [post]
+func (h *Handler) UnstakeCurveLPHandler(c *gin.Context) {
+    var req StakeCurveLPRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+    txID := uuid.New().String()
+    err := h.RedisQueue.PushTxRequest(context.Background(), infrastructure.TxRequest{
+        Action: "unstakeCurveLP",
+        Params: map[string]interface{}{ "amount": req.Amount, "privKeyHex": req.PrivKeyHex },
+        User:   txID,
+    })
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"tx_id": txID, "status": "queued"})
+}
+
+// @Summary Curve LP 스테이킹 현황 조회
+// @Description 유저의 Curve LP 스테이킹 현황을 조회합니다.
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /stake/curve-lp [get]
+func (h *Handler) GetCurveLPStakeHandler(c *gin.Context) {
+    // TODO: 실제 스테이킹 현황 조회 로직 연결
+    c.JSON(http.StatusOK, gin.H{"staked": 0, "voting_power": 0})
 }
 
 // @Summary 프로메테우스 메트릭
@@ -255,6 +324,11 @@ func NewRouter(redisQueue *infrastructure.RedisQueue, gameService *application.G
 	r.POST("/hunt", h.HuntMonsterHandler)
 	r.POST("/admin/backfill", h.BackfillHandler)
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// Curve LP Staking 관련 엔드포인트
+	r.POST("/stake/curve-lp", h.StakeCurveLPHandler)
+	r.POST("/unstake/curve-lp", h.UnstakeCurveLPHandler)
+	r.GET("/stake/curve-lp", h.GetCurveLPStakeHandler)
 
 	return r
 }

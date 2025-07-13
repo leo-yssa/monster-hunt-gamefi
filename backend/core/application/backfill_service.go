@@ -19,7 +19,7 @@ import (
 type BackfillServiceImpl struct {
 	db           *gorm.DB
 	client       *ethclient.Client
-	contract     *infrastructure.Contract
+	contract     *infrastructure.MonsterGame
 	eventRepo    domain.EventRepository
 	wsURL        string
 	contractAddr string
@@ -33,7 +33,7 @@ func NewBackfillService(db *gorm.DB, wsURL, contractAddr string) (domain.Backfil
 	}
 
 	address := common.HexToAddress(contractAddr)
-	contract, err := infrastructure.NewContract(address, client)
+	contract, err := infrastructure.NewMonsterGame(address, client)
 	if err != nil {
 		return nil, err
 	}

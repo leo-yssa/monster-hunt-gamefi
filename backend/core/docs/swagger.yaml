@@ -1,5 +1,5 @@
 definitions:
-  backend_interface.AddMonsterRequest:
+  _interface.AddMonsterRequest:
     properties:
       hp:
         maximum: 10000
@@ -18,7 +18,7 @@ definitions:
     - name
     - reward
     type: object
-  backend_interface.BackfillRequest:
+  _interface.BackfillRequest:
     properties:
       from_block:
         minimum: 0
@@ -27,13 +27,13 @@ definitions:
         minimum: 0
         type: integer
     type: object
-  backend_interface.HuntMonsterRequest:
+  _interface.HuntMonsterRequest:
     properties:
       monster_id:
         minimum: 0
         type: integer
     type: object
-  backend_interface.RegisterPlayerRequest:
+  _interface.RegisterPlayerRequest:
     properties:
       name:
         maxLength: 32
@@ -42,7 +42,16 @@ definitions:
     required:
     - name
     type: object
-  github_com_leo-yssa_monster-hunt-gamefi_backend_infrastructure.BackfillResult:
+  _interface.StakeCurveLPRequest:
+    properties:
+      amount:
+        type: integer
+      privKeyHex:
+        type: string
+      user:
+        type: string
+    type: object
+  domain.BackfillResult:
     properties:
       completed_at:
         type: string
@@ -73,14 +82,14 @@ paths:
         name: backfill
         required: true
         schema:
-          $ref: '#/definitions/backend_interface.BackfillRequest'
+          $ref: '#/definitions/_interface.BackfillRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_leo-yssa_monster-hunt-gamefi_backend_infrastructure.BackfillResult'
+            $ref: '#/definitions/domain.BackfillResult'
       summary: 이벤트 백필드
   /hunt:
     post:
@@ -93,7 +102,7 @@ paths:
         name: hunt
         required: true
         schema:
-          $ref: '#/definitions/backend_interface.HuntMonsterRequest'
+          $ref: '#/definitions/_interface.HuntMonsterRequest'
       produces:
       - application/json
       responses:
@@ -128,7 +137,7 @@ paths:
         name: monster
         required: true
         schema:
-          $ref: '#/definitions/backend_interface.AddMonsterRequest'
+          $ref: '#/definitions/_interface.AddMonsterRequest'
       produces:
       - application/json
       responses:
@@ -150,7 +159,7 @@ paths:
         name: player
         required: true
         schema:
-          $ref: '#/definitions/backend_interface.RegisterPlayerRequest'
+          $ref: '#/definitions/_interface.RegisterPlayerRequest'
       produces:
       - application/json
       responses:
@@ -161,4 +170,61 @@ paths:
               type: string
             type: object
       summary: 플레이어 등록
+  /stake/curve-lp:
+    get:
+      description: 유저의 Curve LP 스테이킹 현황을 조회합니다.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Curve LP 스테이킹 현황 조회
+    post:
+      consumes:
+      - application/json
+      description: Curve LP 토큰을 스테이킹합니다. (privKeyHex는 유저의 개인키이며, 실제 서비스에서는 절대 서버로
+        전달하면 안 됩니다. 테스트/개발용)
+      parameters:
+      - description: '스테이킹 정보 (user: 유저 주소, amount: 수량, privKeyHex: 유저 개인키)'
+        in: body
+        name: stake
+        required: true
+        schema:
+          $ref: '#/definitions/_interface.StakeCurveLPRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Curve LP 토큰 스테이킹
+  /unstake/curve-lp:
+    post:
+      consumes:
+      - application/json
+      description: Curve LP 토큰을 언스테이킹합니다. (privKeyHex는 유저의 개인키이며, 실제 서비스에서는 절대 서버로
+        전달하면 안 됩니다. 테스트/개발용)
+      parameters:
+      - description: '언스테이킹 정보 (user: 유저 주소, amount: 수량, privKeyHex: 유저 개인키)'
+        in: body
+        name: unstake
+        required: true
+        schema:
+          $ref: '#/definitions/_interface.StakeCurveLPRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Curve LP 토큰 언스테이킹
 swagger: "2.0"

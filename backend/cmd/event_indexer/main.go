@@ -88,7 +88,7 @@ func (ei *EventIndexer) indexEvents() {
 		log.Fatal("MONSTER_GAME_CONTRACT env not set")
 	}
 	address := common.HexToAddress(contractAddr)
-	contract, err := infrastructure.NewContract(address, ei.client)
+	contract, err := infrastructure.NewMonsterGame(address, ei.client)
 	if err != nil {
 		log.Fatalf("컨트랙트 인스턴스 생성 실패: %v", err)
 	}
@@ -138,7 +138,7 @@ func (ei *EventIndexer) indexEvents() {
 	}
 }
 
-func (ei *EventIndexer) saveMonsterHuntedEvent(txHash string, event *infrastructure.ContractMonsterHunted) {
+func (ei *EventIndexer) saveMonsterHuntedEvent(txHash string, event *infrastructure.MonsterGameMonsterHunted) {
 	domainEvent := &domain.MonsterHuntedEvent{
 		TxHash:    txHash,
 		Player:    event.Player.Hex(),
@@ -154,7 +154,7 @@ func (ei *EventIndexer) saveMonsterHuntedEvent(txHash string, event *infrastruct
 	}
 }
 
-func (ei *EventIndexer) savePlayerRegisteredEvent(txHash string, event *infrastructure.ContractPlayerRegistered) {
+func (ei *EventIndexer) savePlayerRegisteredEvent(txHash string, event *infrastructure.MonsterGamePlayerRegistered) {
 	domainEvent := &domain.PlayerRegisteredEvent{
 		TxHash:    txHash,
 		Player:    event.Player.Hex(),

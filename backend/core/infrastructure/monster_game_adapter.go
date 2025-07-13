@@ -28,19 +28,9 @@ type MonsterGameAdapter struct {
 
 var _ domain.MonsterGamePort = (*MonsterGameAdapter)(nil)
 
-func NewMonsterGameAdapter(rpcURL, contractAddr, privKeyHex string) (*MonsterGameAdapter, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	client, err := ethclient.DialContext(ctx, rpcURL)
-	if err != nil {
-		return nil, err
-	}
-	_, err = client.NetworkID(ctx)
-	if err != nil {
-		return nil, err
-	}
+func NewMonsterGameAdapter(client *ethclient.Client, contractAddr, privKeyHex string) (*MonsterGameAdapter, error) {
 	address := common.HexToAddress(contractAddr)
-	instance, err := NewContract(address, client)
+	instance, err := NewMonsterGame(address, client)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +56,11 @@ func InitMonsterGameAdapterFromEnv() (*MonsterGameAdapter, error) {
 	if contractAddr == "" || privKeyHex == "" {
 		log.Fatal("컨트랙트 주소와 프라이빗키 환경변수(MONSTER_GAME_CONTRACT, MONSTER_GAME_PRIVKEY)가 필요합니다.")
 	}
-	return NewMonsterGameAdapter(rpcURL, contractAddr, privKeyHex)
+	client, err := ethclient.DialContext(context.Background(), rpcURL)
+	if err != nil {
+		return nil, err
+	}
+	return NewMonsterGameAdapter(client, contractAddr, privKeyHex)
 }
 
 func (r *MonsterGameAdapter) getAuth() (*bind.TransactOpts, error) {
@@ -151,7 +145,7 @@ type ContractInterface interface {
 } 
 
 type contractWrapper struct {
-	inner *Contract
+	inner *MonsterGame
 }
 
 func (w *contractWrapper) RegisterPlayer(auth interface{}, name string) (interface{}, error) {
