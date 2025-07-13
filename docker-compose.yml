@@ -32,8 +32,10 @@ services:
       - MONSTER_GAME_PRIVKEY=${MONSTER_GAME_PRIVKEY}
       - REDIS_URL=redis://redis:6379
     depends_on:
-      - redis
-      - postgres
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -62,8 +64,10 @@ services:
       - MONSTER_GAME_PRIVKEY=${MONSTER_GAME_PRIVKEY}
       - REDIS_URL=redis://redis:6379
     depends_on:
-      - redis
-      - postgres
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -82,8 +86,10 @@ services:
     env_file:
       - .env
     depends_on:
-      - postgres
-      - api
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
     deploy:
       resources:
         limits:
@@ -106,7 +112,8 @@ services:
       - MONSTER_GAME_CONTRACT=${MONSTER_GAME_CONTRACT}
       - POSTGRES_DSN=host=postgres user=postgres password=postgres dbname=monster_gamefi port=5432 sslmode=disable
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     deploy:
       resources:
         limits:
