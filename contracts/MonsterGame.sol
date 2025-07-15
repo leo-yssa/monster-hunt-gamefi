@@ -28,7 +28,7 @@ contract MonsterGame is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     event MonsterAdded(uint indexed monsterId, string name, uint256 hp, uint256 reward);
     event MonsterHunted(address indexed player, uint indexed monsterId, uint256 reward);
 
-    function initialize(address tokenAddress) public initializer {
+    function initialize(address tokenAddress) public virtual initializer {
         __Ownable_init(msg.sender);
         __Pausable_init();
         __ReentrancyGuard_init();
